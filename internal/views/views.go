@@ -153,6 +153,7 @@ type UserHome struct {
 	brewRefresh         actionstate.RefreshGate
 	searchRefresh       actionstate.RefreshGate
 	brewPackagesRefresh actionstate.RefreshGate
+	flatpakRefresh      actionstate.RefreshGate
 }
 
 // New creates a new UserHome views manager
