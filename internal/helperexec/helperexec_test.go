@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/journal"
@@ -190,4 +191,58 @@ func readJournal(t *testing.T, path string) []journal.Entry {
 		entries = append(entries, entry)
 	}
 	return entries
+}
+
+// TestRunCancellationBoundedWhenDescendantRetainsOutputPipe pins issue #82:
+// Run cancels only the direct pkexec process, but a privileged descendant
+// that inherited stdout/stderr can live on after that kill and hold the pipe
+// open. Without a finite WaitDelay the output-copy goroutines would block
+// forever waiting for EOF and the GUI action would stay stuck. The test
+// spawns such a descendant and asserts Run returns promptly (bounded by
+// WaitDelay) with a canceled classification instead of hanging.
+func TestRunCancellationBoundedWhenDescendantRetainsOutputPipe(t *testing.T) {
+	dryrun.Set(false)
+	t.Cleanup(func() { dryrun.Set(false) })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	marker := filepath.Join(t.TempDir(), "helper-started")
+	helper := filepath.Join(t.TempDir(), "fake-helper")
+	body := "#!/bin/sh\n" +
+		"echo started\n" +
+		"( exec sleep 100 ) &\n" +
+		"echo ready >\"" + marker + "\"\n" +
+		"wait\n"
+	if err := os.WriteFile(helper, []byte(body), 0o755); err != nil {
+		t.Fatalf("writing fake helper: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { _, _, e := Run(ctx, "/bin/sh", helper, "do-thing"); done <- e }()
+
+	// Wait until the helper has spawned the descendant that owns the pipe.
+	waited := 0
+	for {
+		if _, err := os.Stat(marker); err == nil {
+			break
+		}
+		waited++
+		if waited > 500 {
+			t.Fatal("fake helper never started")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+
+	// Run must return within WaitDelay plus a small margin rather than wait
+	// for EOF on a pipe only the orphaned descendant still owns.
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "canceled") {
+			t.Errorf("Run error = %v, want a canceled classification", err)
+		}
+	case <-time.After(WaitDelay + 2*time.Second):
+		t.Fatal("Run waited for a descendant retaining the output pipe")
+	}
 }

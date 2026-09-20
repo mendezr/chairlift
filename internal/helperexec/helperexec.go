@@ -32,10 +32,19 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+	"time"
 
 	"github.com/projectbluefin/chairlift/internal/dryrun"
 	"github.com/projectbluefin/chairlift/internal/journal"
 )
+
+// WaitDelay bounds how long Run waits for the pkexec command's output pipes
+// to drain after the process is gone. pkexec hands stdout/stderr on to its
+// privileged helper, which may itself spawn descendants that inherit them; a
+// straggler could otherwise hold cmd.Run open forever waiting for EOF on a
+// pipe only a now-orphaned descendant still owns, exactly as maintenanceexec
+// guards against for configured maintenance scripts.
+const WaitDelay = 5 * time.Second
 
 // Error represents a privileged helper invocation failure.
 type Error struct {
@@ -87,6 +96,9 @@ func Run(ctx context.Context, pkexecPath, helperPath string, args ...string) (st
 	fullArgs := append([]string{helperPath}, args...)
 	journal.Record(action, journalArgs(args), append([]string{pkexecPath}, fullArgs...), journal.SuppressedNone)
 	cmd := exec.CommandContext(ctx, pkexecPath, fullArgs...)
+	// A finite WaitDelay guarantees cancellation returns even when a
+	// privileged descendant of the helper retains the inherited output pipes.
+	cmd.WaitDelay = WaitDelay
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -99,8 +111,11 @@ func Run(ctx context.Context, pkexecPath, helperPath string, args ...string) (st
 	}
 
 	if err != nil {
-		if ctx.Err() == context.DeadlineExceeded {
+		switch ctx.Err() {
+		case context.DeadlineExceeded:
 			return "", stderr.String(), &Error{Message: "command timed out"}
+		case context.Canceled:
+			return "", stderr.String(), &Error{Message: "command canceled"}
 		}
 		return "", stderr.String(), classifyFailure(err, helperPath, stderr.String())
 	}
