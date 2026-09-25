@@ -2,6 +2,7 @@
 # Pre-launch hook for Agent Mode preset AT-SPI scenario:
 # sets up isolated Homebrew/llmman stubs, systemd unit, proxy blocker,
 # and background node stub.
+OUTDIR="${CHAIRLIFT_ATSPI_OUTDIR:-$OUTDIR}"
 
 BIN="$OUTDIR/bin"
 RUNTIME="$OUTDIR/runtime"

@@ -76,6 +76,8 @@ def wait_for(root, name, timeout, roles=None):
             return node
         time.sleep(0.25)
     raise RuntimeError(f"timed out waiting for accessible element {name!r}")
+
+
 def wait_for_selected(node, timeout=10):
     deadline = time.monotonic() + timeout
     while time.monotonic() < deadline:
