@@ -96,11 +96,13 @@ fi
 : "${CHAIRLIFT_CAPABILITIES:=image-descriptor,flatpak,brew,podman,bootc-stage}"
 export CHAIRLIFT_CAPABILITIES
 export HOME="$OUTDIR/home"
+export XDG_CONFIG_HOME="$HOME/.config"
+export XDG_DATA_HOME="$HOME/.local/share"
+export XDG_CACHE_HOME="$HOME/.cache"
 export XDG_RUNTIME_DIR="$OUTDIR/runtime"
-mkdir -p "$HOME"
+mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
-
 [ -r "$PROBE" ] || { echo "probe $PROBE is missing" >&2; exit 1; }
 
 # The application and the probe must share one accessibility bus, which is

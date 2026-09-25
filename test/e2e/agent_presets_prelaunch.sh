@@ -6,7 +6,8 @@ OUTDIR="${CHAIRLIFT_ATSPI_OUTDIR:-$OUTDIR}"
 
 BIN="$OUTDIR/bin"
 RUNTIME="$OUTDIR/runtime"
-mkdir -p "$HOME/.config/systemd/user" "$BIN" "$RUNTIME"
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+mkdir -p "$CONFIG_DIR/systemd/user" "$BIN" "$RUNTIME"
 chmod 0700 "$RUNTIME"
 
 cat > "$BIN/brew" <<STUB
@@ -21,8 +22,7 @@ exit 0
 STUB
 chmod 0755 "$BIN/brew" "$BIN/llmman"
 
-cat > "$HOME/.config/systemd/user/chairlift-llmman.service" <<'UNIT'
-[Unit]
+cat > "$CONFIG_DIR/systemd/user/chairlift-llmman.service" <<'UNIT'
 Description=Test-only Agent Mode unit
 [Service]
 ExecStart=/bin/true
