@@ -138,7 +138,8 @@ pretending the setting can be applied. Search all 3,461 brands
 [Simple Icons](https://simpleicons.org/) publishes — your project, your
 employer, whatever you answer to — and Control Center fetches the one you pick.
 You set it once; it never changes on its own, because a personal mark that
-rotated would stop being personal.
+rotated would stop being personal. Turning the mark off resets the Kickoff applet
+to Plasma's default icon.
 
 On GNOME, **Foundational Livery** puts a foundation's mark in the top bar:
 CNCF, the Linux Foundation, GNOME, freedesktop.org, Apache, Rust, Universal

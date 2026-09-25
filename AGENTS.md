@@ -565,9 +565,12 @@ An agent must not break these:
   `plasma-org.kde.plasma.desktop-appletsrc` for every
   `plugin=org.kde.plasma.kickoff` section, installs the mark as
   `chairlift-livery-app-grid` in hicolor, then writes that icon name to each
-  applet's nested `Configuration/icon` with `kwriteconfig6`. Its repeated
+  applet's nested `Configuration/General/icon` with `kwriteconfig6`. Its repeated
   `--group` arguments are required for KConfig's nested group semantics, and
-  `kwriteconfig6` must remain in `allowedCommands`. If no Kickoff applet is
+  `kwriteconfig6` must remain in `allowedCommands`. When clearing the mark, it
+  deletes the `icon` key across Kickoff applets that still point at
+  `chairlift-livery-app-grid`, falling back to Kickoff's default icon. If no
+  Kickoff applet is
   present/readable, the app-grid section reports unavailable and stays
   insensitive rather than claiming a write succeeded. KDE's Files name is
   `org.kde.dolphin`; KDE has no panel mark. A GNOME panel icon is a themed

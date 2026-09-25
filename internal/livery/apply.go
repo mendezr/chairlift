@@ -350,7 +350,7 @@ func findKickoffApplets() ([][]string, error) {
 }
 
 // kickoffAppletGroups finds each applet section declaring the Kickoff plugin
-// and returns the nested Configuration group kwriteconfig6 must update.
+// and returns the nested Configuration/General group kwriteconfig6 must update.
 func kickoffAppletGroups(data []byte) [][]string {
 	var groups [][]string
 	var section []string
@@ -358,7 +358,7 @@ func kickoffAppletGroups(data []byte) [][]string {
 	isKickoff := false
 	appendKickoff := func() {
 		if isAppletSection && isKickoff {
-			groups = append(groups, append(append([]string(nil), section...), "Configuration"))
+			groups = append(groups, append(append([]string(nil), section...), "Configuration", "General"))
 		}
 	}
 	for _, line := range strings.Split(string(data), "\n") {
@@ -725,6 +725,94 @@ func setKickoffIcon(ctx context.Context, groups [][]string, iconName string) err
 	}
 	return nil
 }
+func clearKickoffIcons(ctx context.Context) error {
+	path, err := kickoffConfigFile()
+	if err != nil {
+		return err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("livery: reading Plasma applet configuration %s: %w", path, err)
+	}
+	groups := kickoffAppletsWithIcon(data, KickoffIconName)
+	if dryrun.Enabled() {
+		for _, group := range groups {
+			log.Printf("[DRY-RUN] would delete Kickoff %s icon", strings.Join(group, "/"))
+		}
+		return nil
+	}
+	for _, group := range groups {
+		args := []string{"--file", path}
+		for _, part := range group {
+			args = append(args, "--group", part)
+		}
+		args = append(args, "--key", "icon", "--delete")
+		out, err := runCommand(ctx, "kwriteconfig6", args...)
+		if err != nil {
+			return fmt.Errorf("livery: deleting Kickoff icon in %s: %w: %s", strings.Join(group, "/"), err, strings.TrimSpace(out))
+		}
+	}
+	return nil
+}
+
+func kickoffAppletsWithIcon(data []byte, iconName string) [][]string {
+	var groups [][]string
+	var currentApplet []string
+	isKickoff := false
+	hasTargetIcon := false
+	flush := func() {
+		if len(currentApplet) == 4 && isKickoff && hasTargetIcon {
+			groups = append(groups, append(append([]string(nil), currentApplet...), "Configuration", "General"))
+		}
+	}
+	inTargetConfig := false
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			parts, ok := parseKConfigGroups(line)
+			if !ok {
+				inTargetConfig = false
+				continue
+			}
+			if len(parts) == 4 && parts[0] == "Containments" && parts[2] == "Applets" && isDecimal(parts[1]) && isDecimal(parts[3]) {
+				flush()
+				currentApplet = parts
+				isKickoff = false
+				hasTargetIcon = false
+				inTargetConfig = false
+				continue
+			}
+			if len(currentApplet) == 4 && len(parts) >= 5 && parts[0] == currentApplet[0] && parts[1] == currentApplet[1] && parts[2] == currentApplet[2] && parts[3] == currentApplet[3] {
+				if len(parts) == 6 && parts[4] == "Configuration" && parts[5] == "General" {
+					inTargetConfig = true
+				} else {
+					inTargetConfig = false
+				}
+				continue
+			}
+			inTargetConfig = false
+			continue
+		}
+		if len(currentApplet) == 4 {
+			key, value, ok := strings.Cut(line, "=")
+			if ok {
+				key = strings.TrimSpace(key)
+				value = strings.TrimSpace(value)
+				if key == "plugin" && value == "org.kde.plasma.kickoff" {
+					isKickoff = true
+				}
+				if inTargetConfig && key == "icon" && value == iconName {
+					hasTargetIcon = true
+				}
+			}
+		}
+	}
+	flush()
+	return groups
+}
 
 // Clear removes a surface's override, restoring whatever the system supplies.
 //
@@ -756,6 +844,11 @@ func Clear(ctx context.Context, s Surface) error {
 		for path, theme := range paths {
 			log.Printf("[DRY-RUN] would remove %s and refresh the %s icon cache", path, theme)
 		}
+		if s == AppGrid {
+			if err := clearKickoffIcons(ctx); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 	for path := range paths {
@@ -775,6 +868,9 @@ func Clear(ctx context.Context, s Surface) error {
 	if s == AppGrid {
 		for theme := range themes {
 			pruneEmptyThemeDir(theme)
+		}
+		if err := clearKickoffIcons(ctx); err != nil {
+			return err
 		}
 	}
 	return nil

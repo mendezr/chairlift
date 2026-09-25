@@ -28,9 +28,9 @@ plugin=org.kde.plasma.kickoff
 `)
 	got := kickoffAppletGroups(data)
 	want := [][]string{
-		{"Containments", "1", "Applets", "2", "Configuration"},
-		{"Containments", "3", "Applets", "4", "Configuration"},
-		{"Containments", "6", "Applets", "7", "Configuration"},
+		{"Containments", "1", "Applets", "2", "Configuration", "General"},
+		{"Containments", "3", "Applets", "4", "Configuration", "General"},
+		{"Containments", "6", "Applets", "7", "Configuration", "General"},
 	}
 	if len(got) != len(want) {
 		t.Fatalf("kickoffAppletGroups() = %v, want %v", got, want)
@@ -113,8 +113,8 @@ plugin=org.kde.plasma.kickoff
 		t.Fatalf("Apply did not install the Kickoff icon at %s: %v", iconPath, err)
 	}
 	for _, call := range []string{
-		"kwriteconfig6 --file " + config + " --group Containments --group 1 --group Applets --group 2 --group Configuration --key icon " + KickoffIconName,
-		"kwriteconfig6 --file " + config + " --group Containments --group 3 --group Applets --group 4 --group Configuration --key icon " + KickoffIconName,
+		"kwriteconfig6 --file " + config + " --group Containments --group 1 --group Applets --group 2 --group Configuration --group General --key icon " + KickoffIconName,
+		"kwriteconfig6 --file " + config + " --group Containments --group 3 --group Applets --group 4 --group Configuration --group General --key icon " + KickoffIconName,
 	} {
 		if !fake.sawPrefix(call) {
 			t.Errorf("Apply did not run %q; calls: %v", call, fake.calls)
@@ -189,7 +189,7 @@ func TestApplyKDEAppGridReportsKwriteconfigFailure(t *testing.T) {
 	}
 
 	err := Apply(context.Background(), AppGrid, Source{Kind: FromFile, Value: art})
-	if err == nil || !strings.Contains(err.Error(), "permission denied") || !strings.Contains(err.Error(), "Containments/1/Applets/2/Configuration") {
+	if err == nil || !strings.Contains(err.Error(), "permission denied") || !strings.Contains(err.Error(), "Containments/1/Applets/2/Configuration/General") {
 		t.Fatalf("Apply error = %v, want command failure and applet group", err)
 	}
 }
@@ -197,5 +197,82 @@ func TestApplyKDEAppGridReportsKwriteconfigFailure(t *testing.T) {
 func TestKwriteconfig6IsInTheClosedCommandSet(t *testing.T) {
 	if !allowedCommands["kwriteconfig6"] {
 		t.Fatal("kwriteconfig6 is missing from the livery command allowlist")
+	}
+}
+
+func TestClearKDEAppGridDeletesKickoffIcon(t *testing.T) {
+	useTempDataHome(t)
+	fake := newFakeCommands(t)
+	useDesktop(t, deskenv.KDE)
+	config := filepath.Join(t.TempDir(), "plasma-org.kde.plasma.desktop-appletsrc")
+	original := kickoffConfigFile
+	kickoffConfigFile = func() (string, error) { return config, nil }
+	t.Cleanup(func() { kickoffConfigFile = original })
+
+	// Applet 2 has KickoffIconName -> should be deleted.
+	// Applet 4 has a custom icon -> should NOT be deleted.
+	// Applet 6 has no icon -> should NOT be deleted.
+	// Applet 8 is folder plugin, has KickoffIconName -> should NOT be deleted.
+	data := `[Containments][1][Applets][2]
+plugin=org.kde.plasma.kickoff
+[Containments][1][Applets][2][Configuration][General]
+icon=` + KickoffIconName + `
+[Containments][1][Applets][4]
+plugin=org.kde.plasma.kickoff
+[Containments][1][Applets][4][Configuration][General]
+icon=user-custom-icon
+[Containments][1][Applets][6]
+plugin=org.kde.plasma.kickoff
+[Containments][1][Applets][8]
+plugin=org.kde.plasma.folder
+[Containments][1][Applets][8][Configuration][General]
+icon=` + KickoffIconName + `
+`
+	if err := os.WriteFile(config, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := Clear(context.Background(), AppGrid); err != nil {
+		t.Fatalf("Clear(AppGrid): %v", err)
+	}
+
+	wantCall := "kwriteconfig6 --file " + config + " --group Containments --group 1 --group Applets --group 2 --group Configuration --group General --key icon --delete"
+	if !fake.sawPrefix(wantCall) {
+		t.Errorf("Clear did not run %q; calls: %v", wantCall, fake.calls)
+	}
+
+	unwantedCall := "kwriteconfig6 --file " + config + " --group Containments --group 1 --group Applets --group 4"
+	if fake.sawPrefix(unwantedCall) {
+		t.Errorf("Clear modified applet 4 which has custom icon; calls: %v", fake.calls)
+	}
+}
+
+func TestClearKDEAppGridDryRunDoesNotDeleteKickoffIcon(t *testing.T) {
+	useTempDataHome(t)
+	fake := newFakeCommands(t)
+	useDesktop(t, deskenv.KDE)
+	config := filepath.Join(t.TempDir(), "plasma-org.kde.plasma.desktop-appletsrc")
+	original := kickoffConfigFile
+	kickoffConfigFile = func() (string, error) { return config, nil }
+	t.Cleanup(func() { kickoffConfigFile = original })
+
+	data := `[Containments][1][Applets][2]
+plugin=org.kde.plasma.kickoff
+[Containments][1][Applets][2][Configuration][General]
+icon=` + KickoffIconName + `
+`
+	if err := os.WriteFile(config, []byte(data), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dryrun.Set(true)
+	t.Cleanup(func() { dryrun.Set(false) })
+
+	if err := Clear(context.Background(), AppGrid); err != nil {
+		t.Fatalf("Clear(AppGrid) dry-run: %v", err)
+	}
+
+	if fake.sawPrefix("kwriteconfig6 ") {
+		t.Errorf("dry-run executed kwriteconfig6: %v", fake.calls)
 	}
 }
