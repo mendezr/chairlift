@@ -19,10 +19,9 @@ class NodeHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
-
-    def log_message(self, _format, *_args):
-        pass
-
+    def log_message(self, fmt, *args):
+        sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
+        sys.stderr.flush()
 
 class ProxyBlockerHandler(BaseHTTPRequestHandler):
     def do_CONNECT(self):
@@ -39,10 +38,9 @@ class ProxyBlockerHandler(BaseHTTPRequestHandler):
             with open(log_path, "a", encoding="utf-8") as f:
                 f.write(f"BLOCKED: {self.command} {self.path}\n")
 
-    def log_message(self, _format, *_args):
-        pass
-
-
+    def log_message(self, fmt, *args):
+        sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
+        sys.stderr.flush()
 def run():
     node_server = ThreadingHTTPServer(("127.0.0.1", 17434), NodeHandler)
     proxy_server = ThreadingHTTPServer(("127.0.0.1", 17435), ProxyBlockerHandler)

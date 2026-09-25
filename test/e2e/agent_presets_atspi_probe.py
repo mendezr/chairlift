@@ -169,7 +169,7 @@ def main():
     emit("PAGE", name="Agents", selected=int(selected))
     mode = wait_for(app, "Agent Mode", 10)
     emit("CONTROL", name="Agent Mode", role=role_of(mode))
-    readiness = wait_for_name_containing(mode, "Ready.", 30)
+    readiness = wait_for_name_containing(app, "Ready.", 30)
     emit("STATUS", name=readiness)
     for title in ("Active Model", "Recommended Presets"):
         row = wait_for(app, title, 30)
