@@ -22,9 +22,10 @@ import (
 // UI action forever.
 const commandTimeout = 30 * time.Second
 
-// Surface is one place a mark is shown. Each is a themed icon *name* that
-// ChairLift shadows in the user's own icon theme; none is a path, and none
-// involves editing a file another package owns.
+// Surface is one place a mark is shown. GNOME surfaces shadow themed icon
+// names in the user's own icon theme; KDE's app grid additionally writes that
+// name into each Kickoff applet's user configuration. No surface edits a file
+// another package owns.
 type Surface int
 
 const (
@@ -84,6 +85,10 @@ var surfacesByDesktop = map[deskenv.Desktop]map[Surface]surfaceSpec{
 		Dock: {theme: "hicolor", subdir: filepath.Join("scalable", "apps"), name: DockIconNameGNOME},
 	},
 	deskenv.KDE: {
+		// Kickoff reads this icon name from its user applet configuration.
+		// It is kept distinct from desktop-owned names so Clear can remove
+		// only ChairLift's override.
+		AppGrid: {theme: "hicolor", subdir: filepath.Join("scalable", "apps"), name: KickoffIconName},
 		// hicolor, not Breeze: see DockIconNameKDE.
 		Dock: {theme: "hicolor", subdir: filepath.Join("scalable", "apps"), name: DockIconNameKDE},
 	},
@@ -195,6 +200,10 @@ func PanelIconName(id string) string {
 const DockIconName = DockIconNameGNOME
 
 const (
+	// KickoffIconName is the icon-theme name written to Plasma Kickoff's
+	// applet configuration. The applet loads it through KIconLoader.
+	KickoffIconName = "chairlift-livery-app-grid"
+
 	// DockIconNameGNOME is the icon-theme name the Files mark shadows on GNOME.
 	DockIconNameGNOME = "org.gnome.Nautilus"
 
@@ -278,6 +287,7 @@ var allowedCommands = map[string]bool{
 	"gsettings":             true,
 	"dconf":                 true,
 	"gtk-update-icon-cache": true,
+	"kwriteconfig6":         true,
 	"systemctl":             true,
 }
 
@@ -287,6 +297,125 @@ func execCommand(ctx context.Context, name string, args ...string) (string, erro
 	}
 	out, err := exec.CommandContext(ctx, name, args...).CombinedOutput()
 	return string(out), err
+}
+
+// kickoffConfigFile is an injection seam for Plasma's per-user applet file.
+var kickoffConfigFile = defaultKickoffConfigFile
+
+func defaultKickoffConfigFile() (string, error) {
+	if dir := os.Getenv("XDG_CONFIG_HOME"); dir != "" {
+		return filepath.Join(dir, "plasma-org.kde.plasma.desktop-appletsrc"), nil
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("livery: locating config directory: %w", err)
+	}
+	return filepath.Join(home, ".config", "plasma-org.kde.plasma.desktop-appletsrc"), nil
+}
+
+// ErrKickoffUnavailable means the running Plasma session has no configured
+// Kickoff applet to receive the app-grid icon setting.
+var ErrKickoffUnavailable = errors.New("livery: KDE Kickoff applet is unavailable")
+
+// AppGridAvailable reports whether ChairLift has a target for the current
+// desktop's app-grid mark. Plasma is supported only when its user applet file
+// contains at least one Kickoff instance; GNOME retains its icon-theme target.
+func AppGridAvailable() (bool, error) {
+	desktop := detectDesktop()
+	if desktop != deskenv.KDE {
+		return surfaceSupported(AppGrid, desktop), nil
+	}
+	groups, err := findKickoffApplets()
+	if err != nil {
+		return false, err
+	}
+	return len(groups) > 0, nil
+}
+
+// findKickoffApplets returns the KConfig group paths for every configured
+// Kickoff applet. A missing applet file means there is no available target.
+func findKickoffApplets() ([][]string, error) {
+	path, err := kickoffConfigFile()
+	if err != nil {
+		return nil, err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("livery: reading Plasma applet configuration %s: %w", path, err)
+	}
+	return kickoffAppletGroups(data), nil
+}
+
+// kickoffAppletGroups finds each applet section declaring the Kickoff plugin
+// and returns the nested Configuration group kwriteconfig6 must update.
+func kickoffAppletGroups(data []byte) [][]string {
+	var groups [][]string
+	var section []string
+	isAppletSection := false
+	isKickoff := false
+	appendKickoff := func() {
+		if isAppletSection && isKickoff {
+			groups = append(groups, append(append([]string(nil), section...), "Configuration"))
+		}
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if strings.HasPrefix(line, "[") {
+			appendKickoff()
+			parts, ok := parseKConfigGroups(line)
+			section, isAppletSection, isKickoff = nil, false, false
+			if !ok || len(parts) != 4 || parts[0] != "Containments" || parts[2] != "Applets" || !isDecimal(parts[1]) || !isDecimal(parts[3]) {
+				continue
+			}
+			section = parts
+			isAppletSection = true
+			continue
+		}
+		if !isAppletSection {
+			continue
+		}
+		key, value, ok := strings.Cut(line, "=")
+		if ok && strings.TrimSpace(key) == "plugin" && strings.TrimSpace(value) == "org.kde.plasma.kickoff" {
+			isKickoff = true
+		}
+	}
+	appendKickoff()
+	return groups
+}
+
+func parseKConfigGroups(section string) ([]string, bool) {
+	var groups []string
+	for len(section) > 0 {
+		if section[0] != '[' {
+			return nil, false
+		}
+		end := strings.IndexByte(section, ']')
+		if end < 1 {
+			return nil, false
+		}
+		group := section[1:end]
+		if group == "" {
+			return nil, false
+		}
+		groups = append(groups, group)
+		section = section[end+1:]
+	}
+	return groups, len(groups) > 0
+}
+
+func isDecimal(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, r := range value {
+		if r < '0' || r > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 // dataHome is an injection seam for $XDG_DATA_HOME, so tests never write
@@ -488,14 +617,25 @@ func looksLikeSVG(data []byte) bool {
 
 // Apply installs a mark on one surface.
 //
-// The panel additionally needs the extension pointed at ChairLift's icon
-// name; the other two surfaces shadow a name their consumer already asks for,
-// so installing the file is the whole operation.
+// The panel additionally points the GNOME extension at ChairLift's icon
+// name, and KDE's app grid updates each Kickoff applet's icon setting. The
+// remaining surfaces shadow a name their consumer already asks for.
 func Apply(ctx context.Context, s Surface, src Source) error {
 	desktop := detectDesktop()
 	spec, ok := surfaceFor(s, desktop)
 	if !ok {
 		return fmt.Errorf("livery: surface %s is not supported on %s", surfaceName(s), desktop)
+	}
+	var kickoffGroups [][]string
+	var err error
+	if s == AppGrid && desktop == deskenv.KDE {
+		kickoffGroups, err = findKickoffApplets()
+		if err != nil {
+			return err
+		}
+		if len(kickoffGroups) == 0 {
+			return ErrKickoffUnavailable
+		}
 	}
 	data, err := resolve(ctx, src)
 	if err != nil {
@@ -533,6 +673,11 @@ func Apply(ctx context.Context, s Surface, src Source) error {
 			log.Printf("[DRY-RUN] would set %s %s=%s and %s=%s",
 				extensionSchema, extensionIconKey, PanelIconName(selectionID), extensionModeKey, extensionIconMode)
 		}
+		if s == AppGrid && desktop == deskenv.KDE {
+			for _, group := range kickoffGroups {
+				log.Printf("[DRY-RUN] would set Kickoff %s icon=%s", strings.Join(group, "/"), KickoffIconName)
+			}
+		}
 		return nil
 	}
 
@@ -550,6 +695,9 @@ func Apply(ctx context.Context, s Surface, src Source) error {
 	if err := refreshIconCache(ctx, spec.theme); err != nil {
 		return err
 	}
+	if s == AppGrid && desktop == deskenv.KDE {
+		return setKickoffIcon(ctx, kickoffGroups, KickoffIconName)
+	}
 	if s != Panel {
 		return nil
 	}
@@ -557,6 +705,25 @@ func Apply(ctx context.Context, s Surface, src Source) error {
 		return err
 	}
 	return gsettingsSet(ctx, extensionSchema, extensionModeKey, extensionIconMode)
+}
+
+func setKickoffIcon(ctx context.Context, groups [][]string, iconName string) error {
+	path, err := kickoffConfigFile()
+	if err != nil {
+		return err
+	}
+	for _, group := range groups {
+		args := []string{"--file", path}
+		for _, part := range group {
+			args = append(args, "--group", part)
+		}
+		args = append(args, "--key", "icon", iconName)
+		out, err := runCommand(ctx, "kwriteconfig6", args...)
+		if err != nil {
+			return fmt.Errorf("livery: setting Kickoff icon in %s: %w: %s", strings.Join(group, "/"), err, strings.TrimSpace(out))
+		}
+	}
+	return nil
 }
 
 // Clear removes a surface's override, restoring whatever the system supplies.
