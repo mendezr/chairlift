@@ -55,6 +55,25 @@ def named_node(root, name, roles=None):
     return None
 
 
+LIST_ROLES = ("list box", "list")
+ROW_ROLES = ("list item", "table cell")
+
+
+def is_sidebar(node):
+    try:
+        if role_of(node) not in LIST_ROLES:
+            return False
+        return any(role_of(child) in ROW_ROLES for child in node.children)
+    except Exception:
+        return False
+
+
+def find_sidebar_rows(app):
+    for node in descendants(app):
+        if is_sidebar(node):
+            return [child for child in node.children if role_of(child) in ROW_ROLES]
+    return []
+
 def find_application():
     for name in APPLICATION_NAMES:
         try:
@@ -100,11 +119,26 @@ def wait_for_name_containing(root, marker, timeout):
     raise RuntimeError(f"timed out waiting for accessible name containing {marker!r}")
 
 
-def activate(node):
-    """Invoke the AT-SPI action, falling back to dogtail's node activation."""
+def activate(node, app=None):
+    """Invoke the AT-SPI action, falling back to dogtail's node activation.
+
+    GTK 4 sidebar rows (`list item`) do not expose a click action over AT-SPI.
+    When activating a sidebar row, find its index among the sidebar's list items
+    and send `<Alt>{index + 1}` via rawinput, or select it via dogtail.
+    """
+    if role_of(node) in ROW_ROLES and app is not None:
+        rows = find_sidebar_rows(app)
+        if node in rows:
+            index = rows.index(node)
+            rawinput.keyCombo(f"<Alt>{index + 1}")
+            return
     action = getattr(node, "doActionNamed", None)
     if action is not None:
         action("click")
+        return
+    select = getattr(node, "select", None)
+    if select is not None:
+        select()
         return
     click = getattr(node, "click", None)
     if click is None:
@@ -130,7 +164,7 @@ def main():
     # Navigate by the accessible sidebar item so the scenario does not carry
     # a second page-order inventory or depend on a physical keyboard layout.
     agents = wait_for(app, "Agents", 30)
-    activate(agents)
+    activate(agents, app=app)
     selected = wait_for_selected(agents, 10)
     emit("PAGE", name="Agents", selected=int(selected))
     mode = wait_for(app, "Agent Mode", 10)
