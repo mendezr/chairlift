@@ -9,8 +9,10 @@ import sys
 import time
 
 try:
-    from dogtail import rawinput, tree
     from dogtail.config import config
+
+    config.checkForA11y = False
+    from dogtail import rawinput, tree
 except ImportError as error:  # pragma: no cover - Go test reports this prerequisite
     print(f"dogtail is not importable: {error}", file=sys.stderr)
     sys.exit(3)
