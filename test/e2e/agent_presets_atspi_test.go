@@ -126,8 +126,7 @@ func TestAgentModePresetsThroughATSPIVerifiesActivation(t *testing.T) {
 	// Verify that neither brew nor llmman stubs were invoked with real mutation commands in dry-run mode
 	llmmanLog, err := os.ReadFile(filepath.Join(outDir, "llmman_invocations.log"))
 	if err == nil {
-		for _, line := range strings.Split(string(llmmanLog), "
-") {
+		for _, line := range strings.Split(string(llmmanLog), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "config get") {
 				continue
@@ -137,8 +136,7 @@ func TestAgentModePresetsThroughATSPIVerifiesActivation(t *testing.T) {
 	}
 	brewLog, err := os.ReadFile(filepath.Join(outDir, "brew_invocations.log"))
 	if err == nil {
-		for _, line := range strings.Split(string(brewLog), "
-") {
+		for _, line := range strings.Split(string(brewLog), "\n") {
 			line = strings.TrimSpace(line)
 			if line == "" || strings.HasPrefix(line, "outdated") || strings.HasPrefix(line, "tap-info") || strings.HasPrefix(line, "info") || strings.HasPrefix(line, "--version") {
 				continue
