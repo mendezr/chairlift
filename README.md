@@ -450,11 +450,8 @@ and cross-architecture build gates. Run `make e2e` on a host with GTK4,
 Libadwaita, `dbus-run-session`, and Xvfb to execute the built application's
 help path, start its dry-run window in a private headless session, poll bounded
 startup readiness, stage the complete install layout, and exercise the installed
-privileged helper's argument rejection. When the Agent Mode model preset UI is
-present, the suite verifies its accessible preset names and activates a preset
-through a private AT-SPI session in dry-run mode; this needs `at-spi2-core` and
-`python3-dogtail`. The hosted E2E job installs these runtime dependencies and
-runs the same target. The unit gate also scans every
+privileged helper's argument rejection. The hosted E2E job installs those
+runtime dependencies and runs the same target. The unit gate also scans every
 workflow and rejects external GitHub Actions references that are not pinned to
 full commit SHAs.
 

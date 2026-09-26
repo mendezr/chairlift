@@ -23,6 +23,7 @@ STUB
 chmod 0755 "$BIN/brew" "$BIN/llmman"
 
 cat > "$CONFIG_DIR/systemd/user/chairlift-llmman.service" <<'UNIT'
+[Unit]
 Description=Test-only Agent Mode unit
 [Service]
 ExecStart=/bin/true

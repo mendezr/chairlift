@@ -190,7 +190,7 @@ def main():
     )
     choice_nodes = {}
     for family in families:
-        choice = wait_for(dialog, family, 5)
+        choice = wait_for(app, family, 5, roles=("push button", "button"))
         choice_nodes[family] = choice
         emit("CHOICE", name=family, role=role_of(choice))
 
@@ -210,7 +210,7 @@ def main():
                 if marker in log_file.read():
                     active_model = wait_for(app, "Active Model", 5)
                     model_name = wait_for_name_containing(
-                        active_model, "unsloth/gemma-3", 10
+                        app, "unsloth/gemma-3", 10
                     )
                     emit("MODEL", name=model_name)
                     emit("ACTIVATED", family="Gemma")
