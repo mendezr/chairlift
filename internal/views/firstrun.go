@@ -382,18 +382,30 @@ func (a *FirstRunAssistant) onLiveryChoiceToggled(surface livery.Surface, state 
 		return
 	}
 	if a.host != nil && a.host.SetLiveryEnabled(surface, state) {
+		if dryrun.Enabled() {
+			// The page previews the change and then keeps its confirmed
+			// state, because a dry run persists nothing. Mirror that here so
+			// the assistant never claims a mark the page did not keep.
+			a.restoreLiveryChoice(surface, state)
+		}
 		return
 	}
+	a.restoreLiveryChoice(surface, state)
+	a.showToast(pageview.SetupChoiceBusyMessage)
+}
+
+// restoreLiveryChoice puts the assistant's Appearance switch back.
+//
+// The restore runs after the state-set handler returns: setting the switch
+// from inside its own state-set emission re-enters GTK's switch
+// mid-transition.
+func (a *FirstRunAssistant) restoreLiveryChoice(surface livery.Surface, state bool) {
 	entry := a.liveryRows[surface]
-	// The restore runs after this state-set handler returns: setting the
-	// switch from inside its own state-set emission re-enters GTK's switch
-	// mid-transition.
 	sgtk.RunOnMainThread(func() {
 		a.suppress = true
 		entry.toggle.SetActive(!state)
 		a.suppress = false
 	})
-	a.showToast(pageview.SetupChoiceBusyMessage)
 }
 
 // refreshLiveryRows reads every Appearance row's state from the Livery page.

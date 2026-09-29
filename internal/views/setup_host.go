@@ -110,10 +110,11 @@ func (uh *UserHome) OnUpdateSourcesRendered(fn func()) {
 //
 // gtk_switch_set_active emits state-set when the value changes, which runs
 // the same handler a click does — comparison against liveryState, the
-// section's gate, persistence and apply off the main thread — and leaves
-// the page's switch showing what the assistant chose. The switch is
+// section's gate, persistence and apply off the main thread. The switch is
 // insensitive exactly while its gate holds a run or the surface is
-// unavailable, so its sensitivity is the admission answer.
+// unavailable, so its sensitivity is the admission answer. Whether the flip
+// lands is the page's decision: a live success keeps it, while a failure or
+// a --dry-run preview restores it, and the assistant mirrors that restore.
 func (uh *UserHome) SetLiveryEnabled(surface livery.Surface, enabled bool) bool {
 	if uh == nil || !uh.liveryLoaded || uh.liverySuppress {
 		return false

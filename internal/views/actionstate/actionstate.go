@@ -73,6 +73,18 @@ func (s *Serializer) Run(generation uint64, fn func()) bool {
 	return true
 }
 
+// IsCurrent reports whether generation is still the newest request claimed for
+// this resource.
+//
+// Run guarantees this at the moment fn starts, but a newer request can be
+// claimed while fn is still working. A completion that publishes to the UI
+// must re-check here, on the thread that owns the widget, because the
+// publishing callback is queued rather than run inline: without the second
+// check a stale worker's success could overwrite the newer confirmed result.
+func (s *Serializer) IsCurrent(generation uint64) bool {
+	return generation != 0 && generation == s.generation.Load()
+}
+
 // TryStart moves an idle action to running. It reports false while the action
 // is already running or after it has completed permanently.
 func (g *Gate) TryStart() bool {

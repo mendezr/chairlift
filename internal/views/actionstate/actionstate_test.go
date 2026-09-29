@@ -401,3 +401,26 @@ func TestSerializerRefusesAnUnclaimedGeneration(t *testing.T) {
 		t.Error("Run accepted generation 0")
 	}
 }
+
+// TestSerializerIsCurrentFollowsLaterClaims pins the second staleness check a
+// queued completion needs: Run guarantees currency only when the work starts,
+// so a result queued back to the main thread must re-check before publishing.
+func TestSerializerIsCurrentFollowsLaterClaims(t *testing.T) {
+	var s Serializer
+	if s.IsCurrent(0) {
+		t.Fatal("zero generation is current before any claim")
+	}
+
+	first := s.Claim()
+	if !s.IsCurrent(first) {
+		t.Fatalf("first generation %d is not current", first)
+	}
+
+	second := s.Claim()
+	if s.IsCurrent(first) {
+		t.Fatalf("superseded generation %d remains current", first)
+	}
+	if !s.IsCurrent(second) {
+		t.Fatalf("newest generation %d is not current", second)
+	}
+}

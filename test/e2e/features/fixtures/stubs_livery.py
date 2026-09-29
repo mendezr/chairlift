@@ -172,6 +172,17 @@ def livery_panel_on(context):
     _seed(context, {"panel-enabled": "true"})
 
 
+@stub("livery-app-grid-on")
+def livery_app_grid_on(context):
+    """The app-grid mark was turned on in an earlier session.
+
+    The selection handlers commit only a live success, and the whole AT-SPI
+    suite runs with --dry-run, so a scenario that wants to open the brand
+    chooser must start from an enabled section rather than toggle it on.
+    """
+    _seed(context, {"app-grid-enabled": "true"})
+
+
 @stub("livery-dock-on")
 def livery_dock_on(context):
     """The Files mark was turned on in an earlier session."""

@@ -205,6 +205,18 @@ picking again.
 Any section will also take an SVG of your own, which is the way in for
 anything not on the list.
 
+A selection is only shown as current once it has actually landed. If the
+artwork cannot be fetched, the setting cannot be saved, or the shell refresh
+fails, the section keeps the mark it already had and a toast names the step
+that needs retrying; reopening the chooser shows the stored selection rather
+than the one that failed. The same is true under `--dry-run`: Control Center
+logs each change it would make and then leaves the persisted selection, the
+switches and the summary rows exactly as they were.
+
+Turning a surface off is a revert, not a reset: Control Center restores the
+icon and panel value that were there before it first set the mark, so a
+distro default comes back rather than being pinned as your own choice.
+
 Three things worth knowing. The top-bar section needs the Custom Command Menu
 GNOME extension; without it the section is not shown at all rather than
 offering a control that does nothing. On GNOME, the Files mark is shared

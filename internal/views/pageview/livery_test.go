@@ -86,6 +86,24 @@ func TestDockRowNamesItsFullReach(t *testing.T) {
 	}
 }
 
+// TestSurfaceRowsLabelTheOffActionAsARevert pins the user-facing half of the
+// revert contract: turning a surface's switch off restores whatever was there
+// before ChairLift first set the mark, so the row has to say so instead of
+// leaving the user to discover it.
+func TestSurfaceRowsLabelTheOffActionAsARevert(t *testing.T) {
+	rows := map[string]Row{
+		"app grid": LiveryAppGridRow(),
+		"panel":    LiveryPanelRow(),
+		"files":    LiveryDockRow(),
+	}
+	for name, row := range rows {
+		subtitle := strings.ToLower(row.Subtitle)
+		if !strings.Contains(subtitle, "turn it off") || !strings.Contains(subtitle, "restore") {
+			t.Errorf("%s subtitle %q does not label the off action as a revert", name, row.Subtitle)
+		}
+	}
+}
+
 // TestRotationRowWarnsForASourceBuild asserts the switch says when the unit
 // it writes is tied to a disposable path, rather than failing silently at
 // some future login.

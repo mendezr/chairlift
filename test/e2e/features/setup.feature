@@ -109,13 +109,13 @@ Feature: Setup assistant
     When I toggle the "Customize the Panel Icon" switch in the setup assistant
     Then the Livery dry run would set panel-enabled to true
     And the Livery dry run would point the panel at "chairlift-livery-cncf-symbolic"
-    And the "Customize the Panel Icon" switch in the setup assistant is on
+    And the "Customize the Panel Icon" switch in the setup assistant is off
     And no Livery command changed any setting
     And no icon was written under the home directory
     And the action journal is empty
     When I press "Escape"
     And I open the "Livery" page
-    Then the "Customize the Panel Icon" switch in the Livery "Foundational Livery" section is on
+    Then the "Customize the Panel Icon" switch in the Livery "Foundational Livery" section is off
     And the "Customize the Files Icon" switch in the Livery "Dock Livery" section is off
 
   @args.--setup @stub.livery-no-extension

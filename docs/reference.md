@@ -164,6 +164,15 @@ the `glib-2.0/schemas` directory of any `$XDG_DATA_DIRS` entry, or the user's
 for a direct install, and a Homebrew cask has to compile the user directory
 itself.
 
+A selection is only shown as current once the work behind it has landed. The
+handlers resolve every asynchronous attempt through
+`internal/views/liverystate`: a failed save/fetch/apply/refresh and a
+`--dry-run` preview both leave the last confirmed selection, switch and
+rotation state in place, and a completion that a newer attempt superseded
+publishes nothing. A partial apply — the setting landed but the artwork or
+unit did not — commits the setting, because that is what reopening the page
+reads, and the failure toast names the step to retry.
+
 ### Maintenance Page (`maintenance_page`)
 
 | Group | Key | Description |
