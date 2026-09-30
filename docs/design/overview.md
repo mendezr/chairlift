@@ -1408,7 +1408,13 @@ surface in three layers that must stay separate:
   only when the user's `MaintenanceAfterUpdates` preference is set.
 - `internal/updateproviders` holds the production `updateflow.Provider`
   values, which wrap `internal/flatpak`, `internal/homebrew`, `internal/updex`,
-  and `internal/bootc`; the coordinator executes nothing itself.
+  and `internal/bootc`; the coordinator executes nothing itself. A provider's
+  `ApplyResult.Changed` is load-bearing: the coordinator clears a source's
+  pending items and counts it completed only when the provider verified its
+  mutation landed. `flatpak update` exits 0 with `Nothing to update.` on a
+  no-op, so the Flatpak provider re-lists the scopes it ran and reports
+  changed only when those entries are gone; otherwise the items stay pending
+  and the run does not claim them as applied.
 - `internal/views/updatepresent` maps one snapshot to the shell's title,
   description, banner, and action label, and each source's row subtitle. A
   source whose policy has `Configured` false reads "Disabled by

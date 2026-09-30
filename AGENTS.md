@@ -231,6 +231,12 @@ An agent must not break these:
   `updateflow.ErrUnavailable`; the coordinator then shows the source as not
   available and excludes it, rather than failing the whole check and
   printing the internal error as the page's description.
+  A provider's `ApplyResult.Changed` decides whether its pending items are
+  cleared: the coordinator counts a source completed only when the provider
+  verified the mutation landed. `flatpak update` exits 0 with `Nothing to
+  update.` on a no-op, so the Flatpak provider re-lists the scopes it ran and
+  reports changed only when those entries are gone; otherwise the items stay
+  pending and the run does not claim them as applied.
   The operating-system source must keep going through `internal/bootc`'s
   staging path. Adding a
   `bootc upgrade` route to `chairlift-helper` would break both the
