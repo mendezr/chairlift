@@ -329,7 +329,10 @@ func (a *FirstRunAssistant) buildStep(step firstrun.Step) {
 			a.buildLiveryChoice(group, surface, choice)
 		}
 		if a.host != nil {
-			a.host.OnLiveryLoaded(a.refreshLiveryRows)
+			// Settled, not just loaded: the assistant must refresh after a
+			// live failure or a dry-run restore as well as after the first
+			// load, so its switches never claim a mark the page did not keep.
+			a.host.OnLiverySettled(a.refreshLiveryRows)
 		}
 	case firstrun.StepIDApps:
 		a.buildBundleChoices(group)

@@ -35,6 +35,11 @@ type SetupHost interface {
 	// OnLiveryLoaded runs fn on the main thread each time the Livery page
 	// finishes loading its state, and immediately when it already has.
 	OnLiveryLoaded(fn func())
+	// OnLiverySettled runs fn on the main thread after each load and after
+	// every toggle, selection or rotation attempt finishes, including one
+	// that failed and restored its control. It is how the assistant mirrors
+	// a live failure on its own switches, not only a --dry-run restore.
+	OnLiverySettled(fn func())
 	// SetLiveryEnabled turns a surface's mark on or off through the Livery
 	// page's own switch, so the page's handler applies it under its gate. It
 	// returns false, having done nothing, when the page is not ready or its
@@ -91,9 +96,31 @@ func (uh *UserHome) OnLiveryLoaded(fn func()) {
 }
 
 // notifyLiveryLoaded runs every OnLiveryLoaded callback, on the main thread,
-// once a load has applied (or failed) and liveryLoaded is armed.
+// once a load has applied (or failed) and liveryLoaded is armed, then every
+// settled waiter so the assistant's rows reflect the freshly loaded state.
 func (uh *UserHome) notifyLiveryLoaded() {
 	for _, fn := range uh.liveryLoadWaiters {
+		fn()
+	}
+	uh.notifyLiverySettled()
+}
+
+// OnLiverySettled implements SetupHost.
+func (uh *UserHome) OnLiverySettled(fn func()) {
+	if uh == nil || fn == nil {
+		return
+	}
+	uh.liverySettledWaiters = append(uh.liverySettledWaiters, fn)
+	if uh.liveryLoaded {
+		fn()
+	}
+}
+
+// notifyLiverySettled runs every settled callback on the main thread. It runs
+// at the end of each attempt whether it committed or restored, so a live
+// failure reaches the assistant the same way a --dry-run restore does.
+func (uh *UserHome) notifyLiverySettled() {
+	for _, fn := range uh.liverySettledWaiters {
 		fn()
 	}
 }
@@ -114,7 +141,8 @@ func (uh *UserHome) OnUpdateSourcesRendered(fn func()) {
 // insensitive exactly while its gate holds a run or the surface is
 // unavailable, so its sensitivity is the admission answer. Whether the flip
 // lands is the page's decision: a live success keeps it, while a failure or
-// a --dry-run preview restores it, and the assistant mirrors that restore.
+// a --dry-run preview restores it. The assistant refreshes from the settled
+// callback, so a live failure reaches its switches too.
 func (uh *UserHome) SetLiveryEnabled(surface livery.Surface, enabled bool) bool {
 	if uh == nil || !uh.liveryLoaded || uh.liverySuppress {
 		return false

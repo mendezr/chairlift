@@ -151,6 +151,12 @@ type UserHome struct {
 	// liveryLoadWaiters run on the main thread after each load applies; the
 	// setup assistant's Appearance step refreshes its rows from them.
 	liveryLoadWaiters []func()
+	// liverySettledWaiters run on the main thread after each load and after
+	// every toggle, selection or rotation attempt finishes, whether it landed
+	// or restored its control. The setup assistant reads the confirmed state
+	// from them, so a live failure mirrors onto its switches too; see
+	// notifyLiverySettled.
+	liverySettledWaiters []func()
 	// One gate per section serializes that section's toggle work. Every
 	// section's Apply and Clear touch the same mark file, so an off-then-on
 	// flip without a gate can land Clear after Apply and leave the switch

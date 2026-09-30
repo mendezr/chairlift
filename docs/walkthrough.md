@@ -205,13 +205,15 @@ picking again.
 Any section will also take an SVG of your own, which is the way in for
 anything not on the list.
 
-A selection is only shown as current once it has actually landed. If the
-artwork cannot be fetched, the setting cannot be saved, or the shell refresh
-fails, the section keeps the mark it already had and a toast names the step
-that needs retrying; reopening the chooser shows the stored selection rather
-than the one that failed. The same is true under `--dry-run`: Control Center
-logs each change it would make and then leaves the persisted selection, the
-switches and the summary rows exactly as they were.
+A selection is only shown as current once the work behind it has landed. If
+the setting cannot be saved, the section keeps the mark it already had and a
+toast names the step that needs retrying. If the setting did save but the
+artwork fetch or shell refresh failed, that selection is the one now stored —
+reopening the chooser shows it — and the toast names the step to retry, so
+the mark can be completed without picking again. The same is true under
+`--dry-run`, where nothing is persisted at all: Control Center logs each
+change it would make and then leaves the persisted selection, the switches
+and the summary rows exactly as they were.
 
 Turning a surface off is a revert, not a reset: Control Center restores the
 icon and panel value that were there before it first set the mark, so a
