@@ -42,11 +42,14 @@ func TestLiveryHandlersResolveThroughPureTransitions(t *testing.T) {
 		"uh.publishLiverySelection(",
 		// Rotation is its own serializer, so its completion checks that one.
 		"uh.liveryRotateWork.IsCurrent(generation)",
-		// A stale or skipped rotation completion restores its switch to the
-		// confirmed value and recomputes sensitivity instead of forcing it on.
-		"uh.resetLiveryRotateSwitch(surface)",
-		"toggle.SetActive(uh.liveryRotateState(s))",
-		"uh.restoreLiveryRotateSensitive(surface)",
+		// A rotation attempt carries in-flight candidates so a later flip
+		// cannot write the older confirmed value over it, and the newest
+		// completion publishes the whole pair of switches.
+		"uh.liveryRotatePending.Set(surface, enabled)",
+		"uh.liveryRotatePending.Overlay(uh.liveryState)",
+		"uh.liveryRotatePending.Clear()",
+		"uh.applyLiveryRotateSwitches()",
+		"uh.restoreLiveryRotateSensitive(livery.Panel)",
 		// Every finished attempt tells the assistant to re-read confirmed
 		// state, so a live failure mirrors as well as a --dry-run restore.
 		"uh.notifyLiverySettled()",

@@ -340,9 +340,13 @@ func (uh *UserHome) onLiverySelectionChangedByID(surface livery.Surface, id stri
 // unit. An unordered goroutine per click lets a fast on-then-off flip run
 // RemoveRotation before the earlier InstallRotation finishes, leaving the
 // unit installed while the keys say nothing rotates. Claiming on the main
-// thread fixes the order the user flipped the switches in, and an attempt a
-// newer one has overtaken drops out and puts its own switch back to the
-// confirmed value, so a section never shows a rotation that did not land.
+// thread fixes the order the user flipped the switches in.
+//
+// The two switches also share one persisted pair of keys, so every attempt
+// snapshots the confirmed state with the in-flight candidates overlaid and
+// writes both. The newest attempt to publish owns the whole pair; a
+// superseded one leaves its optimistic switch in place rather than reverting
+// it to a value the newer attempt is about to replace.
 func (uh *UserHome) onLiveryRotateToggled(surface livery.Surface, enabled bool) {
 	if uh.liverySuppress || !uh.liveryLoaded {
 		return
@@ -351,22 +355,18 @@ func (uh *UserHome) onLiveryRotateToggled(surface livery.Surface, enabled bool) 
 	if enabled == uh.liveryRotateState(surface) {
 		return
 	}
-	// The snapshot carries this attempt's candidate; the work writes both
-	// rotate keys, so the section that finishes keeps the other section's
-	// confirmed value. A superseded attempt restores its switch below rather
-	// than letting it outlive a rotation that did not land.
-	state := uh.liveryState
-	if surface == livery.Panel {
-		state.PanelRotate = enabled
-	} else {
-		state.DockRotate = enabled
-	}
+	// Record this candidate before snapshotting so the snapshot carries it,
+	// then overlay every candidate already in flight. Taking the snapshot from
+	// confirmed state alone would write the other section's older confirmed
+	// value back over a rotation that already landed.
+	generation := uh.liveryRotateWork.Claim()
+	uh.liveryRotatePending.Set(surface, enabled)
+	state := uh.liveryRotatePending.Overlay(uh.liveryState)
 	preview := dryrun.Enabled()
 	saved := false
 
-	generation := uh.liveryRotateWork.Claim()
 	go func() {
-		ran := uh.liveryRotateWork.Run(generation, func() {
+		uh.liveryRotateWork.Run(generation, func() {
 			ctx, cancel := livery.DefaultContext()
 			defer cancel()
 
@@ -384,27 +384,20 @@ func (uh *UserHome) onLiveryRotateToggled(surface livery.Surface, enabled bool) 
 			outcome := liverystate.Rotation(liverystate.Result{Saved: saved}, preview)
 			sgtk.RunOnMainThread(func() {
 				if !uh.liveryRotateWork.IsCurrent(generation) {
-					// A newer flip owns this section's confirmed state. Put the
-					// switch back to what is committed so it never shows a
-					// rotation this attempt is not allowed to publish.
-					uh.resetLiveryRotateSwitch(surface)
+					// A newer flip owns the whole pair and will publish it,
+					// carrying this candidate in its snapshot. Leave this
+					// attempt's optimistic switch alone; reverting it here
+					// would show off a rotation the newer attempt persists.
 					return
 				}
-				toggle := uh.liveryRotateToggle(surface)
+				uh.liveryRotatePending.Clear()
 				if outcome.Commit {
-					uh.setLiveryRotateState(surface, enabled)
-				} else if toggle != nil {
-					toggle.SetActive(!enabled)
+					uh.liveryState.PanelRotate = state.PanelRotate
+					uh.liveryState.DockRotate = state.DockRotate
 				}
-				uh.restoreLiveryRotateSensitive(surface)
+				uh.applyLiveryRotateSwitches()
 			})
 		})
-		if !ran {
-			// A newer flip was claimed before this attempt reached the front
-			// of the serializer, so its work never ran. Restore the switch it
-			// optimistically flipped; the newer attempt now owns the state.
-			sgtk.RunOnMainThread(func() { uh.resetLiveryRotateSwitch(surface) })
-		}
 	}()
 }
 
@@ -608,15 +601,6 @@ func (uh *UserHome) finishLiveryToggle(s livery.Surface, outcome liverystate.Out
 	})
 }
 
-// liveryRotateToggle returns the rotate switch that must be restored when a
-// rotation attempt does not commit.
-func (uh *UserHome) liveryRotateToggle(s livery.Surface) *gtk.Switch {
-	if s == livery.Panel {
-		return uh.liveryPanelRotate
-	}
-	return uh.liveryDockRotate
-}
-
 // restoreLiveryRotateSensitive recomputes a rotate switch's sensitivity from
 // the confirmed state once its attempt finishes.
 //
@@ -631,14 +615,23 @@ func (uh *UserHome) restoreLiveryRotateSensitive(s livery.Surface) {
 	uh.syncLiveryRotateSensitive(s, uh.liveryState.DockEnabled)
 }
 
-// resetLiveryRotateSwitch puts one rotate switch back to the confirmed value
-// and recomputes its sensitivity. It runs on the main thread, from a
-// superseded rotation attempt that must not leave its switch showing.
-func (uh *UserHome) resetLiveryRotateSwitch(s livery.Surface) {
-	if toggle := uh.liveryRotateToggle(s); toggle != nil {
-		toggle.SetActive(uh.liveryRotateState(s))
+// applyLiveryRotateSwitches puts both rotate switches back to the confirmed
+// state and recomputes their sensitivity.
+//
+// Both keys are written and published as one pair, so the completion that
+// owns the pair updates both switches; a section's switch may have been
+// optimistically flipped and left alone by a superseded attempt. The
+// programmatic set re-enters the handler, which compares against the
+// confirmed state just written and does nothing.
+func (uh *UserHome) applyLiveryRotateSwitches() {
+	if uh.liveryPanelRotate != nil {
+		uh.liveryPanelRotate.SetActive(uh.liveryState.PanelRotate)
 	}
-	uh.restoreLiveryRotateSensitive(s)
+	if uh.liveryDockRotate != nil {
+		uh.liveryDockRotate.SetActive(uh.liveryState.DockRotate)
+	}
+	uh.restoreLiveryRotateSensitive(livery.Panel)
+	uh.restoreLiveryRotateSensitive(livery.Dock)
 }
 
 func (uh *UserHome) liveryToggleState(s livery.Surface) (bool, string) {
@@ -669,14 +662,6 @@ func (uh *UserHome) liveryRotateState(s livery.Surface) bool {
 		return uh.liveryState.PanelRotate
 	}
 	return uh.liveryState.DockRotate
-}
-
-func (uh *UserHome) setLiveryRotateState(s livery.Surface, v bool) {
-	if s == livery.Panel {
-		uh.liveryState.PanelRotate = v
-		return
-	}
-	uh.liveryState.DockRotate = v
 }
 
 func (uh *UserHome) liverySource(s livery.Surface) livery.Source {

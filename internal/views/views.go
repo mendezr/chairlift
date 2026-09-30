@@ -16,6 +16,7 @@ import (
 	"github.com/projectbluefin/chairlift/internal/updateflow"
 	"github.com/projectbluefin/chairlift/internal/views/actionstate"
 	"github.com/projectbluefin/chairlift/internal/views/badgestate"
+	"github.com/projectbluefin/chairlift/internal/views/liverystate"
 	"github.com/projectbluefin/chairlift/internal/views/pageview"
 	"github.com/projectbluefin/chairlift/internal/views/rowset"
 
@@ -179,6 +180,12 @@ type UserHome struct {
 	// leave the unit's presence disagreeing with the persisted keys. See
 	// onLiveryRotateToggled.
 	liveryRotateWork actionstate.Serializer
+	// liveryRotatePending overlays rotation candidates that have been claimed
+	// but not yet published onto confirmed state. Both rotate switches write
+	// one persisted pair of keys, so the later flip's snapshot must carry the
+	// earlier in-flight candidate instead of writing the older confirmed value
+	// back over a rotation that already landed. See onLiveryRotateToggled.
+	liveryRotatePending liverystate.RotationCandidates
 
 	// Profile Picture section of the Livery page; nil when account_group is
 	// disabled. See profile_picture.go.
